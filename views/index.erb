@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+      <meta charset="UTF-8">
+      <title>Horoscopo</title>
+      <style>
+          body { font-family: Arial, sans-serif; background: #f6f6f6; margin: 0; padding: 0; }
+          .container { max-width: 400px; margin: 60px auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); padding: 32px; }
+          h1 { text-align: center; color: #222; }
+          form { display: flex; flex-direction: column; gap: 20px; }
+          select, button { padding: 10px; font-size: 1rem; border-radius: 4px; border: 1px solid #ccc; }
+          button { background: #4a90e2; color: #fff; border: none; cursor: pointer; transition: background 0.2s; }
+          button:hover { background: #357abd; }
+          .results { margin-top: 24px; padding: 16px; border-radius: 8px; background: #f0f6ff; border: 1px solid #cfe3ff; color: #1e3a5f; }
+          .results.hidden { display: none; }
+          .results .title { font-weight: 600; margin-bottom: 8px; }
+          .error { background: #fff5f5; border-color: #ffd6d6; color: #7a1f1f; }
+      </style>
+      <meta name="csrf-token" content="<%= session[:csrf] %>">
+  </head>
+  <body>
+      <div class="container">
+          <h1>Horóscopo</h1>
+          <form id="horoscope-form" action="/horoscopo" method="post">
+              <input type="hidden" name="authenticity_token" value="<%= session[:csrf] %>">
+              <label for="zodiac">Selecciona tu signo zodiacal:</label>
+              <select id="zodiac" name="zodiac" required>
+                  <option value="">-- Selecciona --</option>
+                  <option value="aries">Aries</option>
+                  <option value="tauro">Tauro</option>
+                  <option value="geminis">Géminis</option>
+                  <option value="cancer">Cáncer</option>
+                  <option value="leo">Leo</option>
+                  <option value="virgo">Virgo</option>
+                  <option value="libra">Libra</option>
+                  <option value="escorpio">Escorpio</option>
+                  <option value="sagitario">Sagitario</option>
+                  <option value="capricornio">Capricornio</option>
+                  <option value="acuario">Acuario</option>
+                  <option value="piscis">Piscis</option>
+              </select>
+              <button type="submit">Consultar</button>
+          </form>
+
+          <div id="results" class="results hidden" aria-live="polite"></div>
+      </div>
+      <script>
+        (function() {
+          const form = document.getElementById('horoscope-form');
+          const select = document.getElementById('zodiac');
+          const results = document.getElementById('results');
+
+          function show(content, isError = false) {
+            results.classList.remove('hidden');
+            results.classList.toggle('error', !!isError);
+            results.innerHTML = content;
+          }
+
+          form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const zodiac = select.value;
+            if (!zodiac) {
+              show('<div class="title">Error</div><div>Por favor selecciona un signo.</div>', true);
+              return;
+            }
+
+            show('<div class="title">Consultando...</div><div>Obteniendo tu horóscopo para ' + select.options[select.selectedIndex].text + '.</div>');
+
+            try {
+              const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+              const body = new URLSearchParams({ zodiac, authenticity_token: token });
+              const resp = await fetch('/horoscopo', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                  'Accept': 'application/json, text/plain, */*',
+                  'X-CSRF-Token': token
+                },
+                body
+              });
+
+              let text;
+              const ct = resp.headers.get('content-type') || '';
+              if (ct.includes('application/json')) {
+                const data = await resp.json();
+                // Try common shapes: {message}, {horoscope}, or stringify otherwise
+                const message = data.message || data.horoscope || JSON.stringify(data, null, 2);
+                text = typeof message === 'string' ? message : JSON.stringify(message, null, 2);
+              } else {
+                text = await resp.text();
+              }
+
+              if (!resp.ok) {
+                throw new Error(text || 'Error consultando el horóscopo');
+              }
+
+              const pretty = '<div class="title">Tu horóscopo</div>' +
+                             '<div style="white-space: pre-wrap; line-height: 1.5;">' +
+                             text +
+                             '</div>';
+              show(pretty);
+            } catch (err) {
+              show('<div class="title">Error</div><div>' + (err && err.message ? err.message : 'Ocurrió un error') + '</div>', true);
+            }
+          });
+        })();
+      </script>
+  </body>
+</html>
