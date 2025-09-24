@@ -12,6 +12,17 @@
 # the additional setup, and require it from the spec files that actually need
 # it.
 #
+# Cargar todas las dependencias de la aplicación
+require 'bundler/setup'
+
+ENV['SESSION_SECRET'] = 'test-session-secret-key-for-testing'
+ENV['CHATGPT_KEY'] = 'fake-api-key-for-testing'
+
+Bundler.require(:default, :test)
+
+# Cargar archivos de la aplicación
+require_relative '../app'
+require_relative '../searcher'
 # See https://rubydoc.info/gems/rspec-core/RSpec/Core/Configuration
 RSpec.configure do |config|
   # rspec-expectations config goes here. You can use an alternate
@@ -45,8 +56,7 @@ RSpec.configure do |config|
   config.shared_context_metadata_behavior = :apply_to_host_groups
 
 # The settings below are suggested to provide a good initial experience
-# with RSpec, but feel free to customize to your heart's content.
-=begin
+  # with RSpec, but feel free to customize to your heart's content.
   # This allows you to limit a spec run to individual examples or groups
   # you care about by tagging them with `:focus` metadata. When nothing
   # is tagged with `:focus`, all examples get run. RSpec also provides
@@ -94,5 +104,4 @@ RSpec.configure do |config|
   # test failures related to randomization by passing the same `--seed` value
   # as the one that triggered the failure.
   Kernel.srand config.seed
-=end
 end

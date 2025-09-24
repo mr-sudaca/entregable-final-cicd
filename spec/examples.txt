@@ -1,0 +1,5 @@
+example_id                            | status | run_time        |
+------------------------------------- | ------ | --------------- |
+./spec/unit/searcher_spec.rb[1:1:1]   | passed | 0.02581 seconds |
+./spec/unit/searcher_spec.rb[1:2:1:1] | passed | 0.00095 seconds |
+./spec/unit/searcher_spec.rb[1:2:2:1] | passed | 0.00288 seconds |
