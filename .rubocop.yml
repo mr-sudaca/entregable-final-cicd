@@ -1,0 +1,12 @@
+# .rubocop.yml
+AllCops:
+  NewCops: enable
+  Exclude:
+    - 'spec/spec_helper.rb'
+    - 'spec/rails_helper.rb'
+    - 'spec/support/**/*'
+    - 'config/**/*'
+    - 'spec/**/*'
+    - 'config.ru'
+    - 'Gemfile'
+

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testExecutions version="1">
+  <file path="./spec/unit/searcher_spec.rb">
+    <testCase name="debería inicializar el cliente OpenAI correctamente" duration="4" />
+    <testCase name="debería devolver el horóscopo formateado" duration="1" />
+    <testCase name="debería devolver un mensaje de error" duration="0" />
+  </file>
+</testExecutions>

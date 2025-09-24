@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  test-and-sonar:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pull-requests: read
+      # Required so Sonar posts PR checks/comments
+      checks: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Sonar needs full history for PR decoration
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4.4'  # or your version
+          bundler-cache: true
+
+      - name: Install deps
+        run: bundle install --jobs 4 --retry 3
+          
+      - name: Run RuboCop (JSON)
+        run: |
+          mkdir -p reports
+          bundle exec rubocop --config .rubocop.yml --force-exclusion --parallel \
+          --format progress \
+          --format json --out reports/rubocop.json \
+          .
+
+      - name: Run RSpec with coverage & Sonar test report
+        run: |
+          mkdir -p reports
+          bundle exec rspec
+
+      - name: Upload test/coverage artifacts (optional)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rspec-and-coverage
+          path: |
+            reports/sonar-test-report.xml
+            coverage/coverage.json
+
+      - name: SonarQube Cloud Scan
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
