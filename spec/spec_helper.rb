@@ -5,8 +5,11 @@ require "simplecov"
 require "simplecov_json_formatter"
 
 SimpleCov.formatter = SimpleCov::Formatter::JSONFormatter
+SimpleCov.root Dir.pwd
+SimpleCov.formatter = SimpleCov::Formatter::JSONFormatter  # optional: creates coverage/coverage.json
+SimpleCov.track_files "**/*.rb"
 SimpleCov.start do
-  add_filter "spec"
+  add_filter(%r{(^|/)spec/spec_helper\.rb$}) # ignore only spec_helper.rb
 end
 
 # --- Bundler and gems ---

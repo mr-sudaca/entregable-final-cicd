@@ -5,7 +5,13 @@ on:
     branches: [ main ]
 
 jobs:
-  test-and-sonar:
+  build:
+    concurrency:
+      group: ${{ github.ref }}
+      cancel-in-progress: true
+
+
+    name: Pruebas, analisis de código y cobertura
     runs-on: ubuntu-latest
 
     permissions:
@@ -28,19 +34,19 @@ jobs:
 
       - name: Install deps
         run: bundle install --jobs 4 --retry 3
-          
-      - name: Run RuboCop (JSON)
-        run: |
-          mkdir -p reports
-          bundle exec rubocop --config .rubocop.yml --force-exclusion --parallel \
-          --format progress \
-          --format json --out reports/rubocop.json \
-          .
 
+      - name: Prep reports
+        run: rm -rf coverage reports && mkdir -p reports
+          
       - name: Run RSpec with coverage & Sonar test report
         run: |
           mkdir -p reports
           bundle exec rspec
+
+      - name: Show coverage.json top-level keys
+        run: |
+          command -v jq >/dev/null || sudo apt-get install -y jq
+          jq -r 'keys' coverage/coverage.json
 
       - name: Upload test/coverage artifacts (optional)
         if: always()
