@@ -21,7 +21,8 @@ require "fileutils"
 FileUtils.mkdir_p("reports")
 
 # --- Test-only env vars (fake values) ---
-ENV["SESSION_SECRET"] = "test-session-secret-key-for-testing"
+ENV["RACK_ENV"] = "test"
+ENV["SESSION_SECRET"] = "test-session-secret-key-for-testing-0123456789-ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdef"
 ENV["CHATGPT_KEY"]    = "fake-api-key-for-testing"
 
 # --- Load your app AFTER SimpleCov.start ---
@@ -51,3 +52,4 @@ RSpec.configure do |config|
   config.order = :random
   Kernel.srand config.seed
 end
+

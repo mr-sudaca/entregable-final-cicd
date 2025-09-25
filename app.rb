@@ -10,9 +10,15 @@ require './searcher'
 class App < Sinatra::Base
   enable :sessions
   set :session_secret, ENV.fetch('SESSION_SECRET')
+  set :environment, (ENV['RACK_ENV']&.to_sym || :development)
 
-  use Rack::Protection
-  use Rack::Protection::AuthenticityToken
+  # In test environment, we relax Rack::Protection to simplify acceptance tests
+  if settings.environment != :test
+    use Rack::Protection
+    use Rack::Protection::AuthenticityToken
+  else
+    set :protection, false
+  end
 
   get '/' do
     erb :index
