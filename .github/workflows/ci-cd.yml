@@ -12,29 +12,29 @@ jobs:
       image_tag: ${{ steps.set_outputs.outputs.image_tag }}
 
     steps:
-      - name: Checkout
+      - name: Obtener código fuente
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Set up Ruby
+      - name: Configurar Ruby
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.4.4'   # or: ruby-version-file: '.ruby-version'
           bundler-cache: true
 
-      - name: Install deps
+      - name: Instalar dependencias
         run: bundle install --jobs 4 --retry 3
 
-      - name: Prep reports
+      - name: Preparar directorios de reportes
         run: rm -rf coverage reports && mkdir -p reports
           
-      - name: Run RSpec with coverage & Sonar test report (ignorando pruebas de remote_browser_spec.rb)
+      - name: Ejecutar pruebas RSpec con cobertura y reporte Sonar
         run: |
           mkdir -p reports
-          bundle exec rspec --exclude-pattern spec/acceptance/remote_browser_spec.rb
+          bundle exec rspec --exclude-pattern spec/acceptance/remote_browser_spec.rb,spec/smoke/smoke_test_spec.rb
 
-      - name: Upload test/coverage artifacts (optional)
+      - name: Subir artefactos de pruebas y cobertura (opcional)
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -43,29 +43,29 @@ jobs:
             reports/sonar-test-report.xml
             coverage/coverage.json
 
-      - name: SonarQube Cloud Scan
+      - name: Análisis de calidad con SonarQube Cloud
         uses: SonarSource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # --- Docker ---
-      - name: Set up QEMU
+      - name: Configurar QEMU
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/setup-qemu-action@v3
 
-      - name: Set up Docker Buildx
+      - name: Configurar Docker Buildx
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to Docker Hub
+      - name: Iniciar sesión en Docker Hub
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push Docker image
+      - name: Construir y publicar imagen Docker
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/build-push-action@v5
         with:
@@ -78,7 +78,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Set Job Outputs
+      - name: Configurar salidas del job
         id: set_outputs
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
@@ -98,10 +98,10 @@ jobs:
       service_name_staging: "horoscopo-staging-service"
 
     steps:
-      - name: Checkout code
+      - name: Obtener código fuente
         uses: actions/checkout@v4
 
-      - name: Configure AWS Credentials
+      - name: Configurar credenciales de AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -109,7 +109,7 @@ jobs:
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: us-east-1
 
-      - name: Deploy CloudFormation Staging Stack
+      - name: Desplegar stack CloudFormation de Staging
         run: |
           IMAGE_URI="${{ secrets.DOCKERHUB_USERNAME }}/${{ needs.analisis-pruebas-imagen-docker.outputs.repo_name }}:${{ needs.analisis-pruebas-imagen-docker.outputs.image_tag }}"
           echo "Deploying Image URI: $IMAGE_URI"
@@ -122,6 +122,7 @@ jobs:
               ChatGPTKey=${{ secrets.CHATGPT_KEY }} \
               RackEnv=staging \
               SessionSecret=${{ secrets.SESSION_SECRET }} \
+              NewRelicKey=${{ secrets.NEW_RELIC_KEY }} \
               LoggingBucket=${{ secrets.LOGGING_BUCKET }} \
               LabRoleArn=${{ secrets.LAB_ROLE_ARN }} \
               VpcId=${{ secrets.VPC_ID }} \
@@ -169,7 +170,7 @@ jobs:
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: us-east-1
 
-      - name: Force New Deployment ECS Service Staging
+      - name: Forzar nuevo despliegue del servicio ECS Staging
         run: |
           aws ecs update-service --cluster ${{ needs.deploy-cfn-staging.outputs.cluster_name_staging }} \
                                  --service ${{ needs.deploy-cfn-staging.outputs.service_name_staging }} \
@@ -183,21 +184,21 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
-    - name: Checkout
+    - name: Obtener código fuente
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
 
-    - name: Set up Ruby
+    - name: Configurar Ruby
       uses: ruby/setup-ruby@v1
       with:
         ruby-version: '3.4.4'   # or: ruby-version-file: '.ruby-version'
         bundler-cache: true
 
-    - name: Install deps
+    - name: Instalar dependencias
       run: bundle install --jobs 4 --retry 3
 
-    - name: Run Remote Browser Tests against Staging
+    - name: Ejecutar pruebas de navegador remotas contra Staging
       env:
         REMOTE_URL: ${{ needs.deploy-cfn-staging.outputs.alb_url_staging }}
       run: |
@@ -216,10 +217,10 @@ jobs:
       service_name_prod: "horoscopo-production-service"
 
     steps:
-      - name: Checkout code
+      - name: Obtener código fuente
         uses: actions/checkout@v4
 
-      - name: Configure AWS Credentials
+      - name: Configurar credenciales de AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -227,7 +228,7 @@ jobs:
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: us-east-1
 
-      - name: Deploy CloudFormation Production Stack
+      - name: Desplegar stack CloudFormation de Producción
         run: |
           IMAGE_URI="${{ secrets.DOCKERHUB_USERNAME }}/${{ needs.analisis-pruebas-imagen-docker.outputs.repo_name }}:${{ needs.analisis-pruebas-imagen-docker.outputs.image_tag }}"
           aws cloudformation deploy \
@@ -237,6 +238,7 @@ jobs:
               EnvironmentName=production \
               DockerImageUri=$IMAGE_URI \
               SessionSecret=${{ secrets.SESSION_SECRET }} \
+              NewRelicKey=${{ secrets.NEW_RELIC_KEY }} \
               ChatGPTKey=${{ secrets.CHATGPT_KEY }} \
               RackEnv=production \
               LabRoleArn=${{ secrets.LAB_ROLE_ARN }} \
@@ -246,7 +248,7 @@ jobs:
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
             --no-fail-on-empty-changes
 
-      - name: Get Staging Stack Outputs
+      - name: Obtener salidas del stack de Producción
         id: get_stack_outputs
         run: |
           # Instalar jq si no está presente (común en ubuntu-latest, pero por si acaso)
@@ -278,7 +280,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-      - name: Configure AWS Credentials
+      - name: Configurar credenciales de AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -286,7 +288,7 @@ jobs:
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: us-east-1
 
-      - name: Force New Deployment ECS Service Production
+      - name: Forzar nuevo despliegue del servicio ECS Producción
         run: |
           aws ecs update-service --cluster ${{ needs.deploy-cfn-prod.outputs.cluster_name_prod }} \
                                  --service ${{ needs.deploy-cfn-prod.outputs.service_name_prod }} \
@@ -301,21 +303,21 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
-    - name: Checkout
+    - name: Obtener código fuente
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
 
-    - name: Set up Ruby
+    - name: Configurar Ruby
       uses: ruby/setup-ruby@v1
       with:
         ruby-version: '3.4.4'   # or: ruby-version-file: '.ruby-version'
         bundler-cache: true
 
-    - name: Install deps
+    - name: Instalar dependencias
       run: bundle install --jobs 4 --retry 3
 
-    - name: Run Remote Browser Tests against Staging
+    - name: Ejecutar pruebas de humo contra Producción
       env:
         REMOTE_URL: ${{ needs.deploy-cfn-prod.outputs.alb_url_prod }}
       run: |

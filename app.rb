@@ -3,8 +3,14 @@
 require 'sinatra'
 require 'json'
 require 'openai'
+require 'newrelic_rpm'
 require 'rack/protection'
 require './searcher'
+
+NewRelic::Agent.manual_start(
+  license_key: ENV.fetch('NEW_RELIC_KEY', nil),
+  app_name: "Horoscopo - #{ENV.fetch('RACK_ENV', 'development')}"
+)
 
 # Define the main application class
 class App < Sinatra::Base
@@ -13,11 +19,11 @@ class App < Sinatra::Base
   set :environment, (ENV['RACK_ENV']&.to_sym || :development)
 
   # In test environment, we relax Rack::Protection to simplify acceptance tests
-  if settings.environment != :test
+  if settings.environment == :test
+    set :protection, false
+  else
     use Rack::Protection
     use Rack::Protection::AuthenticityToken
-  else
-    set :protection, false
   end
 
   get '/' do
