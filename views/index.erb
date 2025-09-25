@@ -83,15 +83,19 @@
               const ct = resp.headers.get('content-type') || '';
               if (ct.includes('application/json')) {
                 const data = await resp.json();
+                if (!resp.ok) {
+                  // Handle error response
+                  const errorMsg = data.error || data.message || 'Error consultando el horóscopo';
+                  throw new Error(errorMsg);
+                }
                 // Try common shapes: {message}, {horoscope}, or stringify otherwise
                 const message = data.message || data.horoscope || JSON.stringify(data, null, 2);
                 text = typeof message === 'string' ? message : JSON.stringify(message, null, 2);
               } else {
                 text = await resp.text();
-              }
-
-              if (!resp.ok) {
-                throw new Error(text || 'Error consultando el horóscopo');
+                if (!resp.ok) {
+                  throw new Error(text || 'Error consultando el horóscopo');
+                }
               }
 
               const pretty = '<div class="title">Tu horóscopo</div>' +

@@ -29,6 +29,30 @@ ENV["CHATGPT_KEY"]    = "fake-api-key-for-testing"
 require_relative "../app"
 require_relative "../searcher"
 
+# --- Capybara configuration for browser testing ---
+require "capybara/rspec"
+require "selenium-webdriver"
+
+Capybara.app = App
+Capybara.server = :puma, { Silent: true }
+Capybara.default_driver = :selenium_chrome_headless
+Capybara.javascript_driver = :selenium_chrome_headless
+
+# Configure Chrome options for headless testing
+Capybara.register_driver :selenium_chrome_headless do |app|
+  options = Selenium::WebDriver::Chrome::Options.new
+  options.add_argument("--headless")
+  options.add_argument("--no-sandbox")
+  options.add_argument("--disable-dev-shm-usage")
+  options.add_argument("--disable-gpu")
+  options.add_argument("--window-size=1280,720")
+  
+  Capybara::Selenium::Driver.new(app, browser: :chrome, options: options)
+end
+
+# Set default wait time for AJAX requests
+Capybara.default_max_wait_time = 10
+
 # --- RSpec configuration ---
 RSpec.configure do |config|
   # Use the Sonar test-execution formatter (no explicit require needed)

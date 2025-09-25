@@ -16,4 +16,7 @@ group :test do
   gem 'simplecov_json_formatter', '~> 0.1.4'  # ✅ correct formatter
   # Generates Sonar's Generic Test Execution XML (counts, durations)
   gem 'rspec-sonarqube-formatter', '~> 1.6'
+  # Browser testing gems
+  gem 'capybara'
+  gem 'selenium-webdriver'
 end

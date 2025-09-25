@@ -28,7 +28,12 @@ class App < Sinatra::Base
     content_type :json
     zodiac = params['zodiac']&.strip
 
-    { message: Searcher.fetch(zodiac) }.to_json
+    begin
+      { message: Searcher.fetch(zodiac) }.to_json
+    rescue StandardError => e
+      status 500
+      { error: 'Error consultando el horóscopo', details: e.message }.to_json
+    end
   end
 
   get '/health' do
