@@ -197,26 +197,29 @@ Resources:
       ServiceName: !Sub 'horoscopo-${EnvironmentName}-service'
       Cluster: !Ref ECSCluster
       TaskDefinition: !Ref ECSTaskDefinition
-      DesiredCount: 1 # Numero inicial de tareas
+      DesiredCount: 1
       LaunchType: FARGATE
+      HealthCheckGracePeriodSeconds: 60   # give the task time to boot before LB checks
       NetworkConfiguration:
         AwsvpcConfiguration:
-          AssignPublicIp: ENABLED # Necesario en subredes publicas sin NAT Gateway
-          Subnets: !Ref SubnetIds # Las mismas subredes publicas del ALB
+          AssignPublicIp: ENABLED
+          Subnets: !Ref SubnetIds
           SecurityGroups:
             - !Ref ECSServiceSecurityGroup
       LoadBalancers:
         - ContainerName: !Sub 'horoscopo-${EnvironmentName}-container'
           ContainerPort: 8000
           TargetGroupArn: !Ref ECSTargetGroup
-      # DesiredCount y TaskDefinition se actualizan en despliegues posteriores
       DeploymentConfiguration:
-        MinimumHealthyPercent: 50 # Permite que baje al 50% durante el deploy
-        MaximumPercent: 200 # Permite que suba al 200% temporalmente
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true           # <- auto-rollback if the deployment fails to stabilize
+        MinimumHealthyPercent: 50 # keep the old task until the new one is healthy (good for DesiredCount=1)
+        MaximumPercent: 200
       Tags:
         - Key: Environment
           Value: !Ref EnvironmentName
-    DependsOn: # Asegura que el listener exista antes de crear el servicio
+    DependsOn:
       - ALBListener
 
 Outputs:
