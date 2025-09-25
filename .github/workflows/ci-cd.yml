@@ -5,31 +5,22 @@ on:
     branches: [ main ]
 
 jobs:
-  build:
-    concurrency:
-      group: ${{ github.ref }}
-      cancel-in-progress: true
-
-
-    name: Pruebas, analisis de código y cobertura
+  analisis-pruebas-imagen-docker:
     runs-on: ubuntu-latest
-
-    permissions:
-      contents: read
-      pull-requests: read
-      # Required so Sonar posts PR checks/comments
-      checks: write
+    outputs:
+      repo_name: ${{ steps.set_outputs.outputs.repo_name }}
+      image_tag: ${{ steps.set_outputs.outputs.image_tag }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Sonar needs full history for PR decoration
+          fetch-depth: 0
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '3.4.4'  # or your version
+          ruby-version: '3.4.4'   # or: ruby-version-file: '.ruby-version'
           bundler-cache: true
 
       - name: Install deps
@@ -58,8 +49,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # --- Pasos de Docker ---
-
+      # --- Docker ---
       - name: Set up QEMU
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/setup-qemu-action@v3
@@ -87,3 +77,246 @@ jobs:
             ${{ secrets.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Set Job Outputs
+        id: set_outputs
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          echo "repo_name=${{ github.event.repository.name }}" >> $GITHUB_OUTPUT
+          echo "image_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
+
+  # -------------------------------------
+  # Job de Despliegue CloudFormation Staging
+  # -------------------------------------
+  deploy-cfn-staging:
+    needs: analisis-pruebas-imagen-docker
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    outputs:
+      alb_url_staging: ${{ steps.get_stack_outputs.outputs.alb_url }}
+      cluster_name_staging: "horoscopo-staging-cluster"
+      service_name_staging: "horoscopo-staging-service"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: us-east-1
+
+      - name: Deploy CloudFormation Staging Stack
+        run: |
+          IMAGE_URI="${{ secrets.DOCKERHUB_USERNAME }}/${{ needs.analisis-pruebas-imagen-docker.outputs.repo_name }}:${{ needs.analisis-pruebas-imagen-docker.outputs.image_tag }}"
+          echo "Deploying Image URI: $IMAGE_URI"
+          aws cloudformation deploy \
+            --template-file template.yaml \
+            --stack-name horoscopo-staging-stack \
+            --parameter-overrides \
+              EnvironmentName=staging \
+              DockerImageUri=$IMAGE_URI \
+              ChatGPTKey=${{ secrets.CHATGPT_KEY }} \
+              RackEnv=staging \
+              SessionSecret=${{ secrets.SESSION_SECRET }} \
+              LoggingBucket=${{ secrets.LOGGING_BUCKET }} \
+              LabRoleArn=${{ secrets.LAB_ROLE_ARN }} \
+              VpcId=${{ secrets.VPC_ID }} \
+              SubnetIds="${{ secrets.SUBNET_IDS }}" \
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+            --no-fail-on-empty-changes
+
+      - name: Get Staging Stack Outputs
+        id: get_stack_outputs
+        run: |
+          # Instalar jq si no está presente (común en ubuntu-latest, pero por si acaso)
+          if ! command -v jq &> /dev/null; then
+             sudo apt-get update && sudo apt-get install -y jq
+          fi
+
+          STACK_OUTPUTS=$(aws cloudformation describe-stacks --stack-name horoscopo-staging-stack --query "Stacks[0].Outputs" --region us-east-1 --output json)
+          echo "Raw Stack Outputs: $STACK_OUTPUTS" # Log para depuración
+
+          # Extraer la URL del ALB (ALBDnsName)
+          ALB_URL=$(echo $STACK_OUTPUTS | jq -r '.[] | select(.OutputKey=="ALBDnsName") | .OutputValue')
+
+          if [ -z "$ALB_URL" ] || [ "$ALB_URL" == "null" ]; then
+            echo "Error: No se pudo obtener ALBDnsName del stack de Staging."
+            exit 1
+          fi
+
+          # Añadir http:// al inicio ya que el DNSName no lo incluye
+          ALB_URL_HTTP="http://${ALB_URL}/"
+          echo "ALB URL Staging: $ALB_URL_HTTP"
+          echo "alb_url=${ALB_URL_HTTP}" >> $GITHUB_OUTPUT
+
+  # -------------------------------------
+  # Update ECS Staging
+  # -------------------------------------
+  update-service-staging:
+    needs: [analisis-pruebas-imagen-docker, deploy-cfn-staging]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: us-east-1
+
+      - name: Force New Deployment ECS Service Staging
+        run: |
+          aws ecs update-service --cluster ${{ needs.deploy-cfn-staging.outputs.cluster_name_staging }} \
+                                 --service ${{ needs.deploy-cfn-staging.outputs.service_name_staging }} \
+                                 --force-new-deployment --region us-east-1
+          aws ecs wait services-stable --cluster ${{ needs.deploy-cfn-staging.outputs.cluster_name_staging }} \
+                                       --services ${{ needs.deploy-cfn-staging.outputs.service_name_staging }} \
+                                       --region us-east-1
+  test-staging:
+    needs: [update-service-staging, deploy-cfn-staging] # Depende de que el servicio esté estable con la nueva versión
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Ruby
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: '3.4.4'   # or: ruby-version-file: '.ruby-version'
+        bundler-cache: true
+
+    - name: Install deps
+      run: bundle install --jobs 4 --retry 3
+
+    - name: Run Remote Browser Tests against Staging
+      env:
+        REMOTE_URL: ${{ needs.deploy-cfn-staging.outputs.alb_url_staging }}
+      run: |
+        bundle exec rspec spec/acceptance/remote_browser_spec.rb --format progress
+
+  # -------------------------------------
+  # Deploy CFN Prod
+  # -------------------------------------
+  deploy-cfn-prod:
+    needs: [deploy-cfn-staging, update-service-staging, test-staging, analisis-pruebas-imagen-docker] 
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    outputs:
+      alb_url_prod: ${{ steps.get_stack_outputs.outputs.alb_url }}
+      cluster_name_prod: "horoscopo-production-cluster"
+      service_name_prod: "horoscopo-production-service"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: us-east-1
+
+      - name: Deploy CloudFormation Production Stack
+        run: |
+          IMAGE_URI="${{ secrets.DOCKERHUB_USERNAME }}/${{ needs.analisis-pruebas-imagen-docker.outputs.repo_name }}:${{ needs.analisis-pruebas-imagen-docker.outputs.image_tag }}"
+          aws cloudformation deploy \
+            --template-file template.yaml \
+            --stack-name horoscopo-prod-stack \
+            --parameter-overrides \
+              EnvironmentName=production \
+              DockerImageUri=$IMAGE_URI \
+              SessionSecret=${{ secrets.SESSION_SECRET }} \
+              ChatGPTKey=${{ secrets.CHATGPT_KEY }} \
+              RackEnv=production \
+              LabRoleArn=${{ secrets.LAB_ROLE_ARN }} \
+              LoggingBucket=${{ secrets.LOGGING_BUCKET }} \
+              VpcId=${{ secrets.VPC_ID }} \
+              SubnetIds="${{ secrets.SUBNET_IDS }}" \
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+            --no-fail-on-empty-changes
+
+      - name: Get Staging Stack Outputs
+        id: get_stack_outputs
+        run: |
+          # Instalar jq si no está presente (común en ubuntu-latest, pero por si acaso)
+          if ! command -v jq &> /dev/null; then
+             sudo apt-get update && sudo apt-get install -y jq
+          fi
+
+          STACK_OUTPUTS=$(aws cloudformation describe-stacks --stack-name horoscopo-prod-stack --query "Stacks[0].Outputs" --region us-east-1 --output json)
+          echo "Raw Stack Outputs: $STACK_OUTPUTS" # Log para depuración
+
+          # Extraer la URL del ALB (ALBDnsName)
+          ALB_URL=$(echo $STACK_OUTPUTS | jq -r '.[] | select(.OutputKey=="ALBDnsName") | .OutputValue')
+
+          if [ -z "$ALB_URL" ] || [ "$ALB_URL" == "null" ]; then
+            echo "Error: No se pudo obtener ALBDnsName del stack de Staging."
+            exit 1
+          fi
+
+          # Añadir http:// al inicio ya que el DNSName no lo incluye
+          ALB_URL_HTTP="http://${ALB_URL}/"
+          echo "ALB URL Staging: $ALB_URL_HTTP"
+          echo "alb_url=${ALB_URL_HTTP}" >> $GITHUB_OUTPUT
+
+  # -------------------------------------
+  # Update ECS Prod
+  # -------------------------------------
+  update-service-prod:
+    needs: [analisis-pruebas-imagen-docker, deploy-cfn-prod]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: us-east-1
+
+      - name: Force New Deployment ECS Service Production
+        run: |
+          aws ecs update-service --cluster ${{ needs.deploy-cfn-prod.outputs.cluster_name_prod }} \
+                                 --service ${{ needs.deploy-cfn-prod.outputs.service_name_prod }} \
+                                 --force-new-deployment --region us-east-1
+          aws ecs wait services-stable --cluster ${{ needs.deploy-cfn-prod.outputs.cluster_name_prod }} \
+                                       --services ${{ needs.deploy-cfn-prod.outputs.service_name_prod }} \
+                                       --region us-east-1
+
+  smoke-test-prod:
+    needs: [update-service-prod, deploy-cfn-prod] # Depende de que el servicio esté estable con la nueva versión
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Ruby
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: '3.4.4'   # or: ruby-version-file: '.ruby-version'
+        bundler-cache: true
+
+    - name: Install deps
+      run: bundle install --jobs 4 --retry 3
+
+    - name: Run Remote Browser Tests against Staging
+      env:
+        REMOTE_URL: ${{ needs.deploy-cfn-prod.outputs.alb_url_prod }}
+      run: |
+        bundle exec rspec spec/smoke/smoke_test_spec.rb --format progress
