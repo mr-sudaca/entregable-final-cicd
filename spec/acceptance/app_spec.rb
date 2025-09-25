@@ -51,4 +51,12 @@ RSpec.describe 'App acceptance', type: :request do
       end
     end
   end
+
+  describe "GET /health" do
+    it "returns 200 and 'OK'" do
+      get "/health"
+      expect(last_response.status).to eq(200)
+      expect(last_response.body).to eq("OK")
+    end
+  end
 end

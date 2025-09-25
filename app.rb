@@ -30,4 +30,8 @@ class App < Sinatra::Base
 
     { message: Searcher.fetch(zodiac) }.to_json
   end
+
+  get '/health' do
+    'OK'
+  end
 end
