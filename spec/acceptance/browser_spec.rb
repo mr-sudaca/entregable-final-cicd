@@ -4,10 +4,13 @@ require 'spec_helper'
 
 RSpec.describe 'Horoscope App Browser Tests', type: :feature, js: true do
   before(:each) do
-    # Stub the external searcher call to avoid hitting API during tests
-    allow(Searcher).to receive(:fetch) do |sign|
-      sleep(0.5) # Add small delay to simulate API call
-      "Tu horóscopo de prueba para #{sign}."
+    # Only stub Searcher if we're testing locally (not against remote URL)
+    unless ENV['REMOTE_URL']
+      # Stub the external searcher call to avoid hitting API during tests
+      allow(Searcher).to receive(:fetch) do |sign|
+        sleep(0.5) # Add small delay to simulate API call
+        "Tu horóscopo de prueba para #{sign}."
+      end
     end
   end
 
@@ -91,11 +94,22 @@ RSpec.describe 'Horoscope App Browser Tests', type: :feature, js: true do
       # Wait for results to appear (skip loading check as it's too fast)
       expect(page).to have_css('.results:not(.hidden)', wait: 10)
       expect(page).to have_content('Tu horóscopo', wait: 10)
-      expect(page).to have_content('Tu horóscopo de prueba para leo.')
-      expect(page).to have_css('.results:not(.error)')
+      
+      # Check for expected content based on test mode
+      if ENV['REMOTE_URL']
+        # When testing remote, we expect real horoscope content
+        expect(page).to have_css('.results:not(.error)')
+      else
+        # When testing locally, we expect our mocked content
+        expect(page).to have_content('Tu horóscopo de prueba para leo.')
+        expect(page).to have_css('.results:not(.error)')
+      end
     end
 
     it 'displays loading state during AJAX request' do
+      # Skip this test for remote URLs as we can't control timing
+      skip 'Loading state test requires local mocking' if ENV['REMOTE_URL']
+      
       visit '/'
       
       select 'Aries', from: 'zodiac'
@@ -121,13 +135,23 @@ RSpec.describe 'Horoscope App Browser Tests', type: :feature, js: true do
       select 'Leo', from: 'zodiac'
       click_button 'Consultar'
       expect(page).to have_content('Tu horóscopo', wait: 10)
-      expect(page).to have_content('Tu horóscopo de prueba para leo.')
+      
+      if ENV['REMOTE_URL']
+        expect(page).to have_css('.results:not(.error)')
+      else
+        expect(page).to have_content('Tu horóscopo de prueba para leo.')
+      end
       
       # Second request with different sign
       select 'Virgo', from: 'zodiac'
       click_button 'Consultar'
       expect(page).to have_content('Tu horóscopo', wait: 10)
-      expect(page).to have_content('Tu horóscopo de prueba para virgo.')
+      
+      if ENV['REMOTE_URL']
+        expect(page).to have_css('.results:not(.error)')
+      else
+        expect(page).to have_content('Tu horóscopo de prueba para virgo.')
+      end
     end
 
     it 'preserves form state after successful submission' do
@@ -138,7 +162,12 @@ RSpec.describe 'Horoscope App Browser Tests', type: :feature, js: true do
       
       # Wait for response
       expect(page).to have_content('Tu horóscopo', wait: 10)
-      expect(page).to have_content('Tu horóscopo de prueba para sagitario.')
+      
+      if ENV['REMOTE_URL']
+        expect(page).to have_css('.results:not(.error)')
+      else
+        expect(page).to have_content('Tu horóscopo de prueba para sagitario.')
+      end
       
       # Check that the selected option is still selected
       expect(page).to have_select('zodiac', selected: 'Sagitario')
@@ -148,10 +177,16 @@ RSpec.describe 'Horoscope App Browser Tests', type: :feature, js: true do
   describe 'Error handling scenarios' do
     context 'when API returns an error' do
       before do
-        allow(Searcher).to receive(:fetch).and_raise(StandardError.new('API Error'))
+        # Only mock errors for local testing
+        unless ENV['REMOTE_URL']
+          allow(Searcher).to receive(:fetch).and_raise(StandardError.new('API Error'))
+        end
       end
 
       it 'displays error message when horoscope fetch fails' do
+        # Skip this test for remote URLs as we can't force API errors
+        skip 'API error test requires local mocking' if ENV['REMOTE_URL']
+        
         visit '/'
         
         select 'Leo', from: 'zodiac'
@@ -189,10 +224,12 @@ RSpec.describe 'Horoscope App Browser Tests', type: :feature, js: true do
       click_button 'Consultar'
       expect(page).to have_css('.results.error', wait: 5)
       
-      # Reset the mock to return success
-      allow(Searcher).to receive(:fetch) do |sign|
-        sleep(0.5)
-        "Tu horóscopo de prueba para #{sign}."
+      # Reset the mock to return success (only for local testing)
+      unless ENV['REMOTE_URL']
+        allow(Searcher).to receive(:fetch) do |sign|
+          sleep(0.5)
+          "Tu horóscopo de prueba para #{sign}."
+        end
       end
       
       # Then make a valid request

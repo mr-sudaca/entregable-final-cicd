@@ -33,8 +33,17 @@ require_relative "../searcher"
 require "capybara/rspec"
 require "selenium-webdriver"
 
-Capybara.app = App
-Capybara.server = :puma, { Silent: true }
+# Configure for remote testing if REMOTE_URL is set
+if ENV['REMOTE_URL']
+  Capybara.app_host = ENV['REMOTE_URL']
+  Capybara.run_server = false
+  puts "🌐 Running browser tests against remote URL: #{ENV['REMOTE_URL']}"
+else
+  Capybara.app = App
+  Capybara.server = :puma, { Silent: true }
+  puts "🏠 Running browser tests against local app"
+end
+
 Capybara.default_driver = :selenium_chrome_headless
 Capybara.javascript_driver = :selenium_chrome_headless
 
