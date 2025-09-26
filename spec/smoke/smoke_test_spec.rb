@@ -28,8 +28,8 @@ RSpec.describe 'Horoscope App Smoke Tests', type: :feature, js: true do
       visit '/'
       
       # Basic page structure
-      expect(page).to have_title('Horoscopo')
-      expect(page).to have_content('Horóscopo')
+      expect(page).to have_title('AstroGPT')
+      expect(page).to have_content('AstroGPT')
       expect(page).to have_selector('form#horoscope-form')
       expect(page).to have_selector('select#zodiac')
       expect(page).to have_button('Consultar')
@@ -97,7 +97,7 @@ RSpec.describe 'Horoscope App Smoke Tests', type: :feature, js: true do
       visit '/'
       
       # Basic elements should still be present
-      expect(page).to have_content('Horóscopo')
+      expect(page).to have_content('AstroGPT')
       expect(page).to have_selector('form#horoscope-form')
       
       # Reset to desktop

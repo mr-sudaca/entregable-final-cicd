@@ -14,8 +14,8 @@ RSpec.describe 'Remote Horoscope App Browser Tests', type: :feature, js: true do
     it 'loads the homepage successfully' do
       visit '/'
       
-      expect(page).to have_title('Horoscopo')
-      expect(page).to have_content('Horóscopo')
+      expect(page).to have_title('AstroGPT')
+      expect(page).to have_content('AstroGPT')
       expect(page).to have_selector('form#horoscope-form')
       expect(page).to have_selector('select#zodiac')
       expect(page).to have_button('Consultar')
@@ -91,14 +91,14 @@ RSpec.describe 'Remote Horoscope App Browser Tests', type: :feature, js: true do
       page.driver.browser.manage.window.resize_to(375, 667)
       visit '/'
       
-      expect(page).to have_content('Horóscopo')
+      expect(page).to have_content('AstroGPT')
       expect(page).to have_selector('form#horoscope-form')
       
       # Test desktop viewport
       page.driver.browser.manage.window.resize_to(1280, 720)
       visit '/'
       
-      expect(page).to have_content('Horóscopo')
+      expect(page).to have_content('AstroGPT')
       expect(page).to have_selector('form#horoscope-form')
     end
 

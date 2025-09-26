@@ -18,7 +18,7 @@ RSpec.describe 'App acceptance', type: :request do
 
       expect(last_response.status).to eq(200)
       expect(last_response.headers["Content-Type"]).to include("text/html")
-      expect(last_response.body).to include("Horóscopo")
+      expect(last_response.body).to include("AstroGPT")
       expect(last_response.body).to include("<form id=\"horoscope-form\"")
     end
   end
